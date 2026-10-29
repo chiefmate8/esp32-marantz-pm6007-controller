@@ -33,6 +33,12 @@ What it can't do:
 - Tell you if Optical 1 or 2 is selected
 - Tell you if Source Direct is on or off
 
+## Why
+
+The PM6007 has no network control, and the remote that comes with it is big and only useful if it's within reach. I didn't want to rely on infrared either, because it needs line of sight. I knew the Remote IN socket accepts codes from other Marantz devices, so I looked into that instead.
+
+All my sources use a fixed volume so everything stays consistent, which means volume is set on the amp itself. That used to mean getting up every time I wanted to change it. Sometimes my dog Chief is resting his head on me on the sofa and I don't want to disturb him. Now I can do it from my phone, which is always on me, unlike the remote. It's also handy when I'm cooking, because I can make changes without walking back and forth to the amp, and Alexa works when my hands are full. Basically I'm lazy and walking over to the amp was too much effort.
+
 ## How it works
 
 ```mermaid
