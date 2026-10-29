@@ -1,0 +1,149 @@
+esphome:
+  name: amp
+  friendly_name: amp
+
+esp32:
+  variant: esp32
+  framework:
+    type: esp-idf
+
+logger:
+
+api:
+  encryption:
+    key: !secret amp_api_key
+
+ota:
+  - platform: esphome
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  power_save_mode: none
+  ap:
+    ssid: amp Fallback Hotspot
+    password: !secret amp_ap_password
+
+captive_portal:
+
+debug:
+  update_interval: 60s
+
+text_sensor:
+  - platform: debug
+    reset_reason:
+      name: "Amp Reset Reason"
+
+sensor:
+  - platform: wifi_signal
+    name: "Amp Wi-Fi Signal"
+    update_interval: 60s
+    
+globals:
+  - id: rc5_toggle
+    type: bool
+    initial_value: 'false'
+
+script:
+  - id: send_rc5
+    mode: queued
+    parameters:
+      addr: int
+      cmd: int
+      ext: int
+    then:
+      - remote_transmitter.transmit_raw:
+          code: !lambda |-
+            std::vector<int32_t> v;
+            auto lvl = [&](bool mark) {
+              int32_t u = mark ? 889 : -889;
+              if (v.empty()) {
+                if (mark) v.push_back(u);
+                return;
+              }
+              if ((v.back() > 0) == mark) v.back() += u;
+              else v.push_back(u);
+            };
+            auto bit = [&](int b) {
+              lvl(!b);
+              lvl(b);
+            };
+            bit(1);
+            bit(1);
+            bit(id(rc5_toggle) ? 1 : 0);
+            for (int i = 4; i >= 0; i--) bit((addr >> i) & 1);
+            if (ext >= 0) for (int i = 0; i < 4; i++) lvl(false);
+            for (int i = 5; i >= 0; i--) bit((cmd >> i) & 1);
+            if (ext >= 0) for (int i = 5; i >= 0; i--) bit((ext >> i) & 1);
+            if (v.back() < 0) v.pop_back();
+            return v;
+          repeat:
+            times: 2
+            wait_time: 100ms
+      - lambda: |-
+          id(rc5_toggle) = !id(rc5_toggle);
+
+remote_transmitter:
+  pin: GPIO13
+  carrier_duty_percent: 100%
+
+remote_receiver:
+  pin:
+    number: GPIO27
+    inverted: true
+    mode:
+      input: true
+      pullup: true
+  dump: all
+
+button:
+  - platform: template
+    name: "Marantz Standby"
+    on_press:
+      - script.execute: {id: send_rc5, addr: 16, cmd: 12, ext: -1}
+  - platform: template
+    name: "Marantz Volume Up"
+    on_press:
+      - script.execute: {id: send_rc5, addr: 16, cmd: 16, ext: -1}
+  - platform: template
+    name: "Marantz Volume Down"
+    on_press:
+      - script.execute: {id: send_rc5, addr: 16, cmd: 17, ext: -1}
+  - platform: template
+    name: "Marantz Mute"
+    on_press:
+      - script.execute: {id: send_rc5, addr: 16, cmd: 13, ext: -1}
+  - platform: template
+    name: "Marantz Source Direct"
+    on_press:
+      - script.execute: {id: send_rc5, addr: 16, cmd: 34, ext: -1}
+  - platform: template
+    name: "Marantz Phono"
+    on_press:
+      - script.execute: {id: send_rc5, addr: 21, cmd: 63, ext: -1}
+  - platform: template
+    name: "Marantz CD"
+    on_press:
+      - script.execute: {id: send_rc5, addr: 20, cmd: 63, ext: -1}
+  - platform: template
+    name: "Marantz Recorder"
+    on_press:
+      - script.execute: {id: send_rc5, addr: 26, cmd: 63, ext: -1}
+  - platform: template
+    name: "Marantz Tuner"
+    on_press:
+      - script.execute: {id: send_rc5, addr: 17, cmd: 63, ext: 10}
+  - platform: template
+    name: "Marantz Network"
+    on_press:
+      - script.execute: {id: send_rc5, addr: 25, cmd: 63, ext: 10}
+  - platform: template
+    name: "Marantz Optical"
+    on_press:
+      - script.execute: {id: send_rc5, addr: 16, cmd: 1, ext: 40}
+  - platform: template
+    name: "Marantz Coaxial"
+    on_press:
+      - script.execute: {id: send_rc5, addr: 16, cmd: 1, ext: 25}
+  - platform: restart
+    name: "Amp Restart"
