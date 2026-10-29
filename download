@@ -1,0 +1,15 @@
+# Real secrets and local config
+secrets.yaml
+.env
+
+# ESPHome build output and Device Builder files
+.esphome/
+.device-builder*
+.receiver_peers.json
+.offloader_pairings.json
+
+# Backups and scratch
+*.bak*
+*.tgz
+.DS_Store
+__pycache__/
