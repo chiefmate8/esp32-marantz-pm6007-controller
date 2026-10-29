@@ -4,12 +4,9 @@ Control a Marantz PM6007 amp from Home Assistant using an ESP32 wired into the a
 
 The config is in [amp.yaml](esphome/amp.yaml).
 
-<table>
-  <tr>
-    <td width="50%"><img src="docs/images/controller.jpg" alt="The finished controller."></td>
-    <td width="50%"><img src="docs/images/phone-remote.png" alt="The phone remote on my phone."></td>
-  </tr>
-</table>
+<img src="../../images/amp-controller.jpg" alt="The finished controller next to the amp" width="450"> <img src="../../images/amp-phone-remote.jpg" alt="The optional phone remote page" width="220">
+
+Left: the controller. Right: the optional phone remote page.
 
 ## What it does
 
