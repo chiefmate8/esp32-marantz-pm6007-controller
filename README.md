@@ -2,7 +2,7 @@
 
 Control a Marantz PM6007 amp from Home Assistant using an ESP32 wired into the amp's Remote IN socket.
 
-Tested on one PM6007 (mine). The config is in [amp.yaml](esphome/amp.yaml).
+The config is in [amp.yaml](esphome/amp.yaml).
 
 <table>
   <tr>
