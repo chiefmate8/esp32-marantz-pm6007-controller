@@ -143,6 +143,8 @@ ESP32 GND ---------------------------------------- RCA shield wire
 - Solder the shield wire to a second Dupont lead
 - Cover every joint with heat shrink
 
+<img src="docs/images/amp-cable.jpg" alt="The finished cable" width="350">
+
 #### Testing the cable
 
 - Multimeter in diode mode, red probe on the D13 lead and black probe on the plug's centre pin. I got 0.551V
