@@ -1,0 +1,22 @@
+Design and build a mobile-first web remote for a Marantz PM6007 amplifier, as a single self-contained HTML file with inline CSS and JS and no external dependencies.
+
+Target: iPhone 15 Pro Max (430 x 932 CSS px) in Safari and as a home screen web app. Everything must fit on one screen with no scrolling. Use 100dvh, viewport-fit=cover, safe-area insets and the apple-mobile-web-app meta tags. Touch targets at least 56px. Use touch-action: manipulation and disable text selection and double-tap zoom.
+
+Look: dark, premium hi-fi feel. Think brushed metal, soft depth and a warm amber accent like valve glow. Bold, modern and cool, not a copy of any existing remote. Do not use the Marantz logo. Use plain text "PM6007" as the header. Smooth press animations, and respect prefers-reduced-motion.
+
+Layout, top to bottom:
+1. A large power button (Standby).
+2. An input grid: Phono, CD, Tuner, Network, Recorder, Optical and Coaxial, with clear icons and labels.
+3. Two smaller buttons: Source Direct and Mute.
+4. Large Volume Down and Volume Up buttons at the bottom, within thumb reach.
+
+Behaviour: each control presses a Home Assistant button entity with
+POST {HA_URL}/api/services/button/press
+Headers: Authorization: Bearer {TOKEN}, Content-Type: application/json
+Body: {"entity_id": "<entity>"}
+
+Put a config object at the top of the file mapping each control to its entity ID (use placeholders such as button.amp_marantz_standby). Do not hard-code the token. Ask for the HA URL and token on first load, store them in localStorage and give me a small settings sheet to change them.
+
+Feedback: a brief success flash on HTTP 200 and a red flash with a short toast on error. The amp gives no feedback, so never show an on/off state or a selected input. Volume buttons send one step per tap. On hold they repeat, but no faster than every 300ms, because the amp ignores commands sent too quickly. Make that interval a setting at the top.
+
+Add aria-labels, good contrast and clear focus states.

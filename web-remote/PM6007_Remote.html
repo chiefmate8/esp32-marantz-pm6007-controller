@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<script>
+/* ============================================================
+   CONFIG — edit entity IDs and timing here.
+   The HA URL and token are NOT stored here; the app asks for
+   them on first load and keeps them in localStorage.
+   ============================================================ */
+const CONFIG = {
+  entities: {
+    standby:      'button.amp_marantz_standby',
+    phono:        'button.amp_marantz_phono',
+    cd:           'button.amp_marantz_cd',
+    tuner:        'button.amp_marantz_tuner',
+    network:      'button.amp_marantz_network',
+    recorder:     'button.amp_marantz_recorder',
+    optical:      'button.amp_marantz_optical',
+    coaxial:      'button.amp_marantz_coaxial',
+    sourceDirect: 'button.amp_marantz_source_direct',
+    mute:         'button.amp_marantz_mute',
+    volumeDown:   'button.amp_marantz_volume_down',
+    volumeUp:     'button.amp_marantz_volume_up'
+  },
+  volumeRepeatMs: 300,   // gap between volume commands while held (and between queued taps). Clamped to >= 300.
+  holdDelayMs: 450,      // how long a volume press must be held before repeating starts
+  requestTimeoutMs: 6000 // give up on a request after this long
+};
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="PM6007">
+<meta name="theme-color" content="#120f0c">
+<meta name="format-detection" content="telephone=no">
+<link rel="apple-touch-icon" id="touch-icon" href="">
+<title>PM6007</title>
+<style>
+:root{
+  --bg:#120f0c;
+  --ink:#f3ece0;
+  --ink-2:#c0b6a5;
+  --ink-3:#8f8676;
+  --amber:#f6a06b;
+  --amber-deep:#d67f48;
+  --amber-glow:rgba(246,160,107,.42);
+  --sage:#aebf92;
+  --sage-glow:rgba(174,191,146,.45);
+  --red:#f07462;
+  --red-glow:rgba(240,116,98,.5);
+  --metal-hi:#3a342d;
+  --metal-lo:#211d19;
+  --brush:repeating-linear-gradient(90deg,rgba(255,255,255,.024) 0 1px,rgba(0,0,0,.035) 1px 2px,transparent 2px 4px);
+  --sheen:linear-gradient(105deg,transparent 25%,rgba(255,255,255,.055) 45%,transparent 62%);
+  --key-shadow:inset 0 1px 0 rgba(255,255,255,.09),inset 0 -1px 0 rgba(0,0,0,.45),0 8px 18px -6px rgba(0,0,0,.7),0 2px 3px rgba(0,0,0,.5);
+  --key-shadow-down:inset 0 2px 6px rgba(0,0,0,.6),inset 0 -1px 0 rgba(255,255,255,.04),0 1px 1px rgba(0,0,0,.5);
+  --font:ui-rounded,"SF Pro Rounded",-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  --gap:clamp(10px,1.6dvh,16px);
+  --ease:cubic-bezier(.2,.8,.2,1);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+[hidden]{display:none!important}
+html,body{margin:0;height:100%;background:var(--bg);overflow:hidden;overscroll-behavior:none}
+body{
+  font-family:var(--font);color:var(--ink);
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;
+  touch-action:manipulation;-webkit-text-size-adjust:100%;
+  background:
+    radial-gradient(120% 55% at 50% -12%,rgba(214,127,72,.16),transparent 62%),
+    radial-gradient(90% 40% at 50% 110%,rgba(214,127,72,.07),transparent 70%),
+    var(--bg);
+}
+a{color:var(--amber)}a:hover{color:var(--ink)}
+button{font:inherit;color:inherit;touch-action:manipulation;-webkit-user-select:none;user-select:none;cursor:pointer}
+button:focus{outline:none}
+button:focus-visible,input:focus-visible{outline:2px solid var(--amber);outline-offset:3px}
+
+.app{
+  height:100vh;height:100dvh;max-width:470px;margin:0 auto;
+  display:flex;flex-direction:column;gap:var(--gap);
+  padding:max(env(safe-area-inset-top),10px) max(env(safe-area-inset-right),18px) max(env(safe-area-inset-bottom),14px) max(env(safe-area-inset-left),18px);
+}
+
+/* header */
+.top{display:flex;align-items:center;justify-content:space-between;min-height:56px;flex:none}
+.brand{display:flex;flex-direction:column;gap:2px;padding-left:2px}
+.brand h1{margin:0;font-size:28px;font-weight:800;letter-spacing:.06em;line-height:1;
+  background:linear-gradient(180deg,#fbf5ea 10%,#b9ad9a 90%);-webkit-background-clip:text;background-clip:text;color:transparent}
+.brand span{font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
+.icon-btn{width:56px;height:56px;border-radius:50%;border:1px solid rgba(0,0,0,.6);display:grid;place-items:center;
+  background:var(--sheen),var(--brush),linear-gradient(180deg,var(--metal-hi),var(--metal-lo));box-shadow:var(--key-shadow);color:var(--ink-2);
+  transition:transform .14s var(--ease),box-shadow .14s var(--ease),color .14s}
+.icon-btn.down{transform:scale(.94);box-shadow:var(--key-shadow-down);color:var(--amber)}
+
+svg.i{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:2.75;stroke-linecap:round;stroke-linejoin:round;display:block;flex:none}
+
+/* shared key */
+.key{
+  position:relative;isolation:isolate;border:1px solid rgba(0,0,0,.6);
+  background:var(--sheen),var(--brush),linear-gradient(180deg,var(--metal-hi),var(--metal-lo));
+  box-shadow:var(--key-shadow);
+  transition:transform .16s var(--ease),box-shadow .16s var(--ease),color .16s,background-color .16s;
+}
+.key .i{color:var(--ink-2);transition:color .16s,filter .16s}
+.key.down{transform:translateY(1px) scale(.965);box-shadow:var(--key-shadow-down),0 0 0 1px rgba(246,160,107,.35),0 0 26px -4px var(--amber-glow)}
+.key.down .i{color:var(--amber);filter:drop-shadow(0 0 6px var(--amber-glow))}
+.key::after{content:"";position:absolute;inset:-1px;border-radius:inherit;pointer-events:none;opacity:0;
+  border:2px solid transparent;transition:opacity .5s ease-out}
+.key.ok::after{opacity:1;border-color:var(--sage);box-shadow:0 0 22px -2px var(--sage-glow),inset 0 0 18px -6px var(--sage-glow);transition:opacity .06s}
+.key.err::after{opacity:1;border-color:var(--red);box-shadow:0 0 24px -2px var(--red-glow),inset 0 0 18px -6px var(--red-glow);transition:opacity .06s}
+.key.err .i{color:var(--red)}
+
+/* power */
+.power-wrap{flex:none;display:flex;flex-direction:column;align-items:center;gap:8px}
+.power{
+  --p:clamp(96px,14.5dvh,140px);
+  width:var(--p);height:var(--p);border-radius:50%;display:grid;place-items:center;
+  background:
+    radial-gradient(circle at 50% 30%,rgba(255,255,255,.14),transparent 55%),
+    repeating-conic-gradient(from 0deg,rgba(255,255,255,.035) 0 1.5deg,rgba(0,0,0,.05) 1.5deg 3deg),
+    radial-gradient(circle at 50% 50%,#3f3830,#1c1915 72%);
+  box-shadow:
+    0 0 0 7px #0d0b09,0 0 0 8px rgba(255,255,255,.06),
+    inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 6px rgba(0,0,0,.5),
+    0 18px 30px -10px rgba(0,0,0,.8);
+}
+.power .i{width:42%;height:42%;stroke-width:2.75;color:var(--amber);filter:drop-shadow(0 0 8px rgba(246,160,107,.35))}
+.power.down{transform:scale(.955);box-shadow:
+    0 0 0 7px #0d0b09,0 0 0 8px rgba(246,160,107,.5),
+    inset 0 3px 10px rgba(0,0,0,.6),0 0 46px 2px var(--amber-glow)}
+.power.down .i{color:#ffd2b0;filter:drop-shadow(0 0 12px rgba(246,160,107,.9))}
+.power-label{font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-2);font-weight:700}
+
+/* inputs */
+.group{flex:none;display:flex;flex-direction:column;gap:8px}
+.kicker{font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-3);font-weight:700;padding-left:4px}
+.inputs{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:10px}
+.inputs .key{grid-column:span 3}
+.inputs .key:nth-child(n+5){grid-column:span 4}
+.tile{height:clamp(66px,9.4dvh,90px);border-radius:22px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;padding:0 4px}
+.tile .i{width:26px;height:26px}
+.tile b{font-size:13px;font-weight:700;letter-spacing:.02em;color:var(--ink);white-space:nowrap;line-height:1}
+
+/* source direct / mute */
+.pair{flex:none;display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.pill{height:58px;border-radius:999px;display:flex;align-items:center;justify-content:center;gap:10px;font-weight:700;font-size:15px;letter-spacing:.02em}
+.pill .i{width:22px;height:22px}
+
+/* volume */
+.volume{flex:1 1 auto;min-height:120px;display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.vol{border-radius:34px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;min-height:120px;touch-action:none}
+.vol .i{width:clamp(40px,6dvh,56px);height:clamp(40px,6dvh,56px)}
+.vol b{font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-2);font-weight:700}
+.vol.down{transform:translateY(1px) scale(.975)}
+.vol.tick .i{animation:tick .24s var(--ease)}
+@keyframes tick{0%{transform:scale(1)}40%{transform:scale(1.16)}100%{transform:scale(1)}}
+
+/* toast */
+.toast{position:fixed;left:50%;top:calc(max(env(safe-area-inset-top),10px) + 6px);z-index:50;
+  transform:translate(-50%,-16px);opacity:0;pointer-events:none;max-width:calc(100% - 36px);
+  padding:12px 18px;border-radius:999px;font-size:14px;font-weight:600;line-height:1.3;text-align:center;
+  background:#3a1612;color:#ffe0d9;border:1px solid rgba(240,116,98,.6);box-shadow:0 12px 30px -8px rgba(0,0,0,.8);
+  transition:opacity .2s,transform .25s var(--ease)}
+.toast.ok{background:#252c1b;color:#eef6df;border-color:rgba(174,191,146,.6)}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+
+/* settings sheet */
+dialog.sheet{position:fixed;inset:auto 0 0 0;margin:0 auto;width:100%;max-width:470px;max-height:100dvh;overflow:auto;
+  border:0;padding:10px 22px calc(max(env(safe-area-inset-bottom),16px) + 8px);border-radius:30px 30px 0 0;color:var(--ink);
+  background:var(--brush),linear-gradient(180deg,#2a251f,#191613);box-shadow:0 -1px 0 rgba(255,255,255,.08),0 -20px 50px rgba(0,0,0,.6)}
+dialog.sheet::backdrop{background:rgba(6,5,4,.62);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+dialog.sheet[open]{animation:rise .32s var(--ease)}
+@keyframes rise{from{transform:translateY(40px);opacity:0}to{transform:none;opacity:1}}
+.grab{width:42px;height:5px;border-radius:99px;background:rgba(255,255,255,.18);margin:0 auto 14px}
+.sheet-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px}
+.sheet h2{margin:0;flex:1;min-width:0;line-height:56px;white-space:nowrap;font-size:22px;font-weight:800;letter-spacing:.01em}
+.sheet p{margin:0 0 18px;font-size:14px;line-height:1.45;color:var(--ink-2);text-wrap:pretty}
+.field{display:flex;flex-direction:column;gap:8px;margin-bottom:16px}
+.field label{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-2);font-weight:700;padding-left:6px}
+.input{width:100%;height:56px;border-radius:999px;padding:0 20px;font:inherit;font-size:16px;color:var(--ink);
+  -webkit-user-select:text;user-select:text;background:#100e0b;border:1px solid rgba(255,255,255,.1);
+  box-shadow:inset 0 2px 6px rgba(0,0,0,.5);caret-color:var(--amber);transition:border-color .15s}
+.input::placeholder{color:#7a7164}
+.input:hover{border-color:rgba(255,255,255,.2)}
+.input:focus{border-color:var(--amber-deep);outline:none}
+.tok{position:relative}
+.tok .input{padding-right:84px}
+.tok button{position:absolute;right:6px;top:6px;height:44px;min-width:68px;border-radius:999px;border:0;background:rgba(255,255,255,.07);
+  color:var(--ink-2);font-size:13px;font-weight:700}
+.tok button:hover{background:rgba(255,255,255,.12)}
+.status{min-height:20px;font-size:14px;font-weight:600;margin:-4px 0 14px 6px;color:var(--ink-2)}
+.status.ok{color:var(--sage)}.status.err{color:var(--red)}
+.actions{display:grid;grid-template-columns:1fr 1.4fr;gap:10px}
+.btn{height:58px;border-radius:999px;font-size:16px;font-weight:800;letter-spacing:.02em;border:1px solid rgba(0,0,0,.6);
+  transition:transform .14s var(--ease),background .14s,box-shadow .14s}
+.btn-sec{background:var(--sheen),var(--brush),linear-gradient(180deg,var(--metal-hi),var(--metal-lo));box-shadow:var(--key-shadow);color:var(--ink)}
+.btn-sec:hover{color:var(--amber)}
+.btn-pri{background:linear-gradient(180deg,#f7ab7c,#d67f48);color:#2a1408;box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 10px 24px -8px rgba(214,127,72,.6)}
+.btn-pri:hover{background:linear-gradient(180deg,#f9b88f,#e08a52)}
+.btn:active{transform:scale(.97)}
+.btn-pri:active{background:linear-gradient(180deg,#e08a52,#b2622d)}
+.meta{margin:16px 0 0 6px;font-size:12px;color:var(--ink-3);line-height:1.5}
+.meta code{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;color:var(--ink-2)}
+
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition-duration:0s!important}
+  .key.down,.power.down,.vol.down,.icon-btn.down,.btn:active{transform:none}
+  .toast{transform:translate(-50%,0)}
+}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" id="i-power" viewBox="0 0 24 24"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/></symbol>
+  <symbol fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" id="i-phono" viewBox="0 0 24 24"><circle cx="10" cy="13" r="8"/><circle cx="10" cy="13" r="1.6"/><path d="M20 3v7.5l-4.5 4.5"/></symbol>
+  <symbol fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" id="i-cd" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M6 12c0-1.7.7-3.2 1.8-4.2"/><circle cx="12" cy="12" r="2"/><path d="M18 12c0 1.7-.7 3.2-1.8 4.2"/></symbol>
+  <symbol fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" id="i-tuner" viewBox="0 0 24 24"><rect x="2" y="8" width="20" height="13" rx="3.5"/><path d="m6 8 9-6"/><circle cx="8" cy="14.5" r="2.5"/><path d="M15 12.5h3"/><path d="M15 16.5h3"/></symbol>
+  <symbol fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" id="i-network" viewBox="0 0 24 24"><path d="M3 7h.01"/><path d="M3 12h.01"/><path d="M3 17h.01"/><path d="M6.5 9.5h.01"/><path d="M6.5 14.5h.01"/><path d="M10 12c1-4.5 2.5-4.5 3.5 0s2.5 4.5 3.5 0 2.5-4.5 3.5 0"/></symbol>
+  <symbol fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" id="i-recorder" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="3"/><circle cx="8" cy="10" r="2"/><path d="M8 12h8"/><circle cx="16" cy="10" r="2"/><path d="m6 20 .7-2.9A1.4 1.4 0 0 1 8.1 16h7.8a1.4 1.4 0 0 1 1.4 1l.7 3"/></symbol>
+  <symbol fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" id="i-optical" viewBox="0 0 24 24"><rect x="2" y="4" width="12" height="10" rx="2.5"/><path d="M8 14v3"/><path d="M5 18.5h6"/><rect x="15.5" y="10" width="6.5" height="10" rx="2.5"/><path d="M18.75 14h.01"/></symbol>
+  <symbol fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" id="i-coaxial" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><path d="M12 12h.01"/></symbol>
+  <symbol fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" id="i-direct" viewBox="0 0 24 24"><path d="M2 13a2 2 0 0 0 2-2V7a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0V4a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0v-4a2 2 0 0 1 2-2"/></symbol>
+  <symbol fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" id="i-mute" viewBox="0 0 24 24"><path d="M11 4.7a.7.7 0 0 0-1.2-.5L6.4 7.6A1.4 1.4 0 0 1 5.4 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.4a1.4 1.4 0 0 1 1 .4l3.4 3.4a.7.7 0 0 0 1.2-.5z"/><path d="m22 9-6 6"/><path d="m16 9 6 6"/></symbol>
+  <symbol fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+  <symbol fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+  <symbol fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" id="i-settings" viewBox="0 0 24 24"><path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></symbol>
+</svg>
+
+<main class="app" aria-label="PM6007 remote">
+  <header class="top">
+    <div class="brand"><h1>PM6007</h1><span>Remote</span></div>
+    <button class="icon-btn" id="open-settings" type="button" aria-label="Settings" aria-haspopup="dialog"><svg class="i"><use href="#i-settings"/></svg></button>
+  </header>
+
+  <div class="power-wrap">
+    <button class="key power" type="button" data-control="standby" aria-label="Standby (toggle power)"><svg class="i"><use href="#i-power"/></svg></button>
+    <span class="power-label" aria-hidden="true">Standby</span>
+  </div>
+
+  <section class="group" aria-labelledby="inputs-label">
+    <div class="kicker" id="inputs-label">Input</div>
+    <div class="inputs">
+      <button class="key tile" type="button" data-control="phono" aria-label="Input Phono"><svg class="i"><use href="#i-phono"/></svg><b>Phono</b></button>
+      <button class="key tile" type="button" data-control="cd" aria-label="Input CD"><svg class="i"><use href="#i-cd"/></svg><b>CD</b></button>
+      <button class="key tile" type="button" data-control="tuner" aria-label="Input Tuner"><svg class="i"><use href="#i-tuner"/></svg><b>Tuner</b></button>
+      <button class="key tile" type="button" data-control="network" aria-label="Input Network"><svg class="i"><use href="#i-network"/></svg><b>Network</b></button>
+      <button class="key tile" type="button" data-control="recorder" aria-label="Input Recorder"><svg class="i"><use href="#i-recorder"/></svg><b>Recorder</b></button>
+      <button class="key tile" type="button" data-control="optical" aria-label="Input Optical"><svg class="i"><use href="#i-optical"/></svg><b>Optical</b></button>
+      <button class="key tile" type="button" data-control="coaxial" aria-label="Input Coaxial"><svg class="i"><use href="#i-coaxial"/></svg><b>Coaxial</b></button>
+    </div>
+  </section>
+
+  <div class="pair">
+    <button class="key pill" type="button" data-control="sourceDirect" aria-label="Source Direct (toggle)"><svg class="i"><use href="#i-direct"/></svg>Source Direct</button>
+    <button class="key pill" type="button" data-control="mute" aria-label="Mute (toggle)"><svg class="i"><use href="#i-mute"/></svg>Mute</button>
+  </div>
+
+  <section class="volume" aria-label="Volume">
+    <button class="key vol" type="button" data-vol="volumeDown" aria-label="Volume down. Hold to repeat."><svg class="i"><use href="#i-minus"/></svg><b>Vol</b></button>
+    <button class="key vol" type="button" data-vol="volumeUp" aria-label="Volume up. Hold to repeat."><svg class="i"><use href="#i-plus"/></svg><b>Vol</b></button>
+  </section>
+</main>
+
+<div class="toast" id="toast" role="status" aria-live="assertive" aria-atomic="true"></div>
+
+<dialog class="sheet" id="settings" aria-labelledby="st-title">
+  <form id="st-form" novalidate>
+    <div class="grab" aria-hidden="true"></div>
+    <div class="sheet-head">
+      <h2 id="st-title">Home Assistant</h2>
+      <button class="icon-btn" id="st-close" type="button" aria-label="Close settings"><svg class="i"><use href="#i-plus" transform="rotate(45 12 12)"/></svg></button>
+    </div>
+    <p id="st-intro">Enter your server address and a long-lived access token. Both are stored on this device only.</p>
+    <div class="field">
+      <label for="ha-url">Server URL</label>
+      <input class="input" id="ha-url" type="url" inputmode="url" autocomplete="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="http://homeassistant.local:8123">
+    </div>
+    <div class="field">
+      <label for="ha-token">Access token</label>
+      <div class="tok">
+        <input class="input" id="ha-token" type="password" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Paste long-lived token">
+        <button type="button" id="tok-toggle" aria-label="Show token" aria-pressed="false">Show</button>
+      </div>
+    </div>
+    <div class="status" id="st-status" role="status" aria-live="polite"></div>
+    <div class="actions">
+      <button class="btn btn-sec" type="button" id="st-test">Test</button>
+      <button class="btn btn-pri" type="submit">Save</button>
+    </div>
+    <div class="meta" id="st-meta"></div>
+  </form>
+</dialog>
+
+<script>
+(() => {
+  const KEY_URL = 'pm6007.haUrl', KEY_TOKEN = 'pm6007.haToken';
+  const REPEAT_MS = Math.max(300, Number(CONFIG.volumeRepeatMs) || 300);
+  const $ = (s, r = document) => r.querySelector(s);
+
+  // ---------- credentials ----------
+  const getCreds = () => {
+    const url = localStorage.getItem(KEY_URL), token = localStorage.getItem(KEY_TOKEN);
+    return url && token ? { url, token } : null;
+  };
+  const cleanUrl = u => u.trim().replace(/\/+$/, '');
+
+  // ---------- feedback ----------
+  const toastEl = $('#toast'); let toastTimer;
+  function toast(msg, kind = 'err') {
+    toastEl.textContent = msg;
+    toastEl.className = 'toast show' + (kind === 'ok' ? ' ok' : '');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove('show'), kind === 'ok' ? 1600 : 2800);
+  }
+  function flash(el, kind) {
+    el.classList.remove('ok', 'err'); void el.offsetWidth;
+    el.classList.add(kind);
+    clearTimeout(el._flash);
+    el._flash = setTimeout(() => el.classList.remove(kind), kind === 'ok' ? 420 : 900);
+  }
+  function errText(status) {
+    if (status === 401) return 'Token rejected (401). Check settings.';
+    if (status === 400 || status === 404) return 'Entity not found (' + status + '). Check CONFIG.';
+    if (status >= 500) return 'Home Assistant error (' + status + ')';
+    return 'Request failed (' + status + ')';
+  }
+
+  // ---------- HA call ----------
+  async function haFetch(path, opts = {}, creds = getCreds()) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), CONFIG.requestTimeoutMs);
+    try {
+      return await fetch(cleanUrl(creds.url) + path, {
+        ...opts, signal: ctrl.signal,
+        headers: { 'Authorization': 'Bearer ' + creds.token, 'Content-Type': 'application/json' }
+      });
+    } finally { clearTimeout(t); }
+  }
+  async function press(control, el) {
+    const creds = getCreds();
+    if (!creds) { openSettings(true); return; }
+    const entity = CONFIG.entities[control];
+    try {
+      const res = await haFetch('/api/services/button/press', { method: 'POST', body: JSON.stringify({ entity_id: entity }) }, creds);
+      if (res.status === 200) flash(el, 'ok');
+      else { flash(el, 'err'); toast(errText(res.status)); }
+    } catch (e) {
+      flash(el, 'err');
+      toast(e.name === 'AbortError' ? 'Home Assistant timed out' : "Can't reach Home Assistant");
+    }
+  }
+
+  // ---------- pressed state ----------
+  function bindDown(el) {
+    const on = () => el.classList.add('down'), off = () => el.classList.remove('down');
+    el.addEventListener('pointerdown', on);
+    ['pointerup', 'pointercancel', 'pointerleave', 'blur'].forEach(ev => el.addEventListener(ev, off));
+    el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') on(); });
+    el.addEventListener('keyup', off);
+  }
+
+  // ---------- one-shot controls ----------
+  document.querySelectorAll('[data-control]').forEach(el => {
+    bindDown(el);
+    el.addEventListener('click', () => press(el.dataset.control, el));
+  });
+
+  // ---------- volume: queued steps, min REPEAT_MS apart ----------
+  const queue = []; let lastSent = 0, pumping = null;
+  function enqueue(control, el, fromHold) {
+    if (queue.length >= 6) return;
+    queue.push({ control, el, fromHold });
+    pump();
+  }
+  function pump() {
+    if (pumping || !queue.length) return;
+    const wait = Math.max(0, lastSent + REPEAT_MS - performance.now());
+    pumping = setTimeout(() => {
+      pumping = null;
+      const job = queue.shift();
+      if (!job) return;
+      lastSent = performance.now();
+      job.el.classList.remove('tick'); void job.el.offsetWidth; job.el.classList.add('tick');
+      press(job.control, job.el);
+      pump();
+    }, wait);
+  }
+  let hold = null;
+  function startHold(el) {
+    if (hold) stopHold();
+    const control = el.dataset.vol;
+    el.classList.add('down');
+    enqueue(control, el, false);
+    hold = { el, delay: setTimeout(() => {
+      hold.rep = setInterval(() => { if (!queue.length) enqueue(control, el, true); }, REPEAT_MS);
+      if (!queue.length) enqueue(control, el, true);
+    }, CONFIG.holdDelayMs) };
+  }
+  function stopHold() {
+    if (!hold) return;
+    clearTimeout(hold.delay); clearInterval(hold.rep);
+    hold.el.classList.remove('down');
+    for (let i = queue.length - 1; i >= 0; i--) if (queue[i].fromHold) queue.splice(i, 1);
+    hold = null;
+  }
+  document.querySelectorAll('[data-vol]').forEach(el => {
+    el.addEventListener('pointerdown', e => {
+      if (e.button > 0) return;
+      e.preventDefault();
+      try { el.setPointerCapture(e.pointerId); } catch (_) {}
+      startHold(el);
+    });
+    ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(ev => el.addEventListener(ev, stopHold));
+    el.addEventListener('keydown', e => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      if (!e.repeat) startHold(el);
+    });
+    el.addEventListener('keyup', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); stopHold(); } });
+    el.addEventListener('blur', stopHold);
+    el.addEventListener('click', e => e.preventDefault());
+  });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) stopHold(); });
+
+  // ---------- settings sheet ----------
+  const dlg = $('#settings'), urlIn = $('#ha-url'), tokIn = $('#ha-token'), status = $('#st-status'), closeBtn = $('#st-close');
+  let firstRun = false;
+  $('#st-meta').innerHTML = 'Volume repeat: <code>' + REPEAT_MS + ' ms</code>, hold delay: <code>' + CONFIG.holdDelayMs + ' ms</code>. Change these and entity IDs in <code>CONFIG</code> at the top of the file.';
+  function setStatus(msg, kind) { status.textContent = msg; status.className = 'status' + (kind ? ' ' + kind : ''); }
+  function openSettings(required) {
+    const c = getCreds();
+    firstRun = !c;
+    urlIn.value = c ? c.url : (urlIn.value || '');
+    tokIn.value = c ? c.token : (tokIn.value || '');
+    closeBtn.hidden = firstRun;
+    $('#st-intro').textContent = firstRun
+      ? 'Connect to Home Assistant to start. Enter your server address and a long-lived access token. Both are stored on this device only.'
+      : 'Enter your server address and a long-lived access token. Both are stored on this device only.';
+    setStatus('');
+    if (!dlg.open) dlg.showModal();
+    setTimeout(() => (firstRun && !urlIn.value ? urlIn : closeBtn.hidden ? urlIn : closeBtn).focus(), 50);
+  }
+  function readForm() {
+    const url = cleanUrl(urlIn.value), token = tokIn.value.trim();
+    if (!/^https?:\/\/[^\s/]+/i.test(url)) { setStatus('Enter a URL starting with http:// or https://', 'err'); urlIn.focus(); return null; }
+    if (!token) { setStatus('Paste your access token', 'err'); tokIn.focus(); return null; }
+    return { url, token };
+  }
+  dlg.addEventListener('cancel', e => { if (firstRun) e.preventDefault(); });
+  dlg.addEventListener('click', e => { if (e.target === dlg && !firstRun) dlg.close(); });
+  closeBtn.addEventListener('click', () => dlg.close());
+  bindDown(closeBtn);
+  const openBtn = $('#open-settings');
+  bindDown(openBtn);
+  openBtn.addEventListener('click', () => openSettings(false));
+  $('#tok-toggle').addEventListener('click', e => {
+    const show = tokIn.type === 'password';
+    tokIn.type = show ? 'text' : 'password';
+    e.currentTarget.textContent = show ? 'Hide' : 'Show';
+    e.currentTarget.setAttribute('aria-pressed', String(show));
+    e.currentTarget.setAttribute('aria-label', show ? 'Hide token' : 'Show token');
+  });
+  $('#st-test').addEventListener('click', async () => {
+    const c = readForm(); if (!c) return;
+    setStatus('Testing…');
+    try {
+      const res = await haFetch('/api/', { method: 'GET' }, c);
+      if (res.status === 200) setStatus('Connected to Home Assistant', 'ok');
+      else setStatus(res.status === 401 ? 'Token rejected (401)' : 'Server replied ' + res.status, 'err');
+    } catch (e) {
+      setStatus(e.name === 'AbortError' ? 'Timed out' : "Can't reach server (check URL, HTTPS and CORS)", 'err');
+    }
+  });
+  $('#st-form').addEventListener('submit', e => {
+    e.preventDefault();
+    const c = readForm(); if (!c) return;
+    localStorage.setItem(KEY_URL, c.url);
+    localStorage.setItem(KEY_TOKEN, c.token);
+    firstRun = false;
+    dlg.close();
+    toast('Settings saved', 'ok');
+  });
+
+  // ---------- iOS niceties ----------
+  document.addEventListener('gesturestart', e => e.preventDefault());
+  document.addEventListener('contextmenu', e => { if (!e.target.closest('input')) e.preventDefault(); });
+  document.addEventListener('touchstart', () => {}, { passive: true });
+  let lastTouch = 0;
+  document.addEventListener('touchend', e => {
+    const now = Date.now();
+    if (now - lastTouch < 320 && !e.target.closest('input,button')) e.preventDefault();
+    lastTouch = now;
+  }, { passive: false });
+
+  // home-screen icon, drawn locally (no external files)
+  try {
+    const c = document.createElement('canvas'); c.width = c.height = 180;
+    const x = c.getContext('2d');
+    const g = x.createRadialGradient(90, 50, 10, 90, 90, 130);
+    g.addColorStop(0, '#3f3830'); g.addColorStop(1, '#14110e');
+    x.fillStyle = g; x.fillRect(0, 0, 180, 180);
+    x.strokeStyle = '#f6a06b'; x.lineWidth = 13; x.lineCap = 'round';
+    x.shadowColor = 'rgba(246,160,107,.7)'; x.shadowBlur = 16;
+    x.beginPath(); x.arc(90, 96, 44, -Math.PI / 2 + 0.65, Math.PI * 1.5 - 0.65); x.stroke();
+    x.beginPath(); x.moveTo(90, 42); x.lineTo(90, 90); x.stroke();
+    $('#touch-icon').href = c.toDataURL('image/png');
+  } catch (_) {}
+
+  if (!getCreds()) openSettings(true);
+})();
+</script>
+</body>
+</html>
