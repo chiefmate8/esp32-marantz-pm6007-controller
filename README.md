@@ -64,6 +64,7 @@ flowchart LR
 - Heat shrink, solder and flux
 - Multimeter
 - Power for the ESP32
+- 3D printed case: [ESP32 Development Case + Wire Passthrough](https://makerworld.com/en/models/692863-esp32-development-case-wire-passthrough) by emergency.assembly on MakerWorld, a remix of [ESP32 Development Case](https://makerworld.com/en/models/412517-esp32-development-case) by JukeSaber. Printed as it is. I haven't included the case files because the designer's licence doesn't allow sharing them. Get them from the link mentioned.
 
 ### Tools
 
@@ -419,6 +420,7 @@ This builds on other people's work:
 - The ESP32 version of that project: https://github.com/samm-git/marantz-rc-esp32
 - A PM6006 ESPHome build, which warns about powering the ESP32 from the amp: https://juju.nz/michaelh/post/2021/brainslug/
 - A PM4000 build using an opto-isolator: https://github.com/Zeke133/MarantzHiFiToHomekit
+- The 3D printed case: ESP32 Development Case + Wire Passthrough by emergency.assembly, a remix of ESP32 Development Case by JukeSaber, both on MakerWorld
 
 ## Known limits and next steps
 
